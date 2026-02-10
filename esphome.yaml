@@ -1,0 +1,399 @@
+substitutions:
+  device_name: cyd-josh
+  friendly_name: CYD-JOSH
+
+esphome:
+  name: $device_name
+  friendly_name: $friendly_name
+  on_boot:
+    priority: -100
+    then:
+      - script.execute: fetch_remote_quotes
+      - script.execute: next_page
+
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+
+# Enable logging (essential for debugging)
+logger:
+
+# Required for fetching remote quotes
+http_request:
+  useragent: esphome/device
+  timeout: 10s
+
+# ============================================================ 
+# Secrets & Network
+# ============================================================ 
+ota:
+  platform: esphome
+  password: !secret ota_password
+
+wifi:
+  # ssid: !secret wifi_ssid
+  # password: !secret wifi_password
+  ap:
+    ssid: $device_name Fallback Hotspot
+    password: !secret josh_password
+
+captive_portal:
+
+# ============================================================ 
+# Globals
+# ============================================================ 
+globals:
+  - id: current_page_index
+    type: int
+    initial_value: '0'
+  - id: text_array_index
+    type: int
+    initial_value: '0'
+  - id: quotes_list
+    type: std::vector<std::string>
+    # Initial values serve as the fallback
+    initial_value: |-
+      {
+        "Fancy a cuppa?", "Keep calm and carry on.", "It's a bit parky out.",
+        "Mind the gap!", "Absolute legend.", "Cheers, mate!",
+        "Bob's your uncle.", "That's a bit rich!", "I'm chuffed to bits.",
+        "Full of beans.", "A total shambles.", "Stop faffing around.",
+        "Right as rain.", "Lost the plot.", "Taking the biscuit.",
+        "Not my cup of tea.", "Easy peasy!", "That's brilliant.",
+        "I'm knackered.", "Give us a bell.", "Sorted, thanks.",
+        "Just lovely.", "A bit of a pickle.", "Bloody marvelous.",
+        "Having a chinwag.", "Fancy a natter?", "Gutted for you.",
+        "Blimey!", "Gordon Bennett!", "Piece of cake.",
+        "That's rubbish.", "Stone the crows!", "The bee's knees.",
+        "Don't get miffed.", "Utterly poppycock.", "A proper brew.",
+        "Bits and bobs.", "Fair play to you.", "Tons of fun.",
+        "Spot of lunch?", "Brilliant, cheers.", "I'm skint.",
+        "Spending a penny.", "A cheeky Nando's.", "Total codswallop.",
+        "Tickled pink.", "Keep your hair on.", "Lovely jubbly!",
+        "You're a star.", "See you anon."
+      }
+
+# ============================================================ 
+# Hardware Setup (CYD Specific)
+# ============================================================ 
+spi:
+  - id: tft
+    clk_pin: GPIO14
+    mosi_pin: GPIO13
+    miso_pin: GPIO12
+  - id: touch
+    clk_pin: GPIO25
+    mosi_pin: GPIO32
+    miso_pin: GPIO39
+
+output:
+  - platform: ledc
+    pin: GPIO21
+    id: backlight_pwm
+  - platform: ledc
+    pin: GPIO4
+    id: led_red
+    inverted: true
+  - platform: ledc
+    pin: GPIO16
+    id: led_green
+    inverted: true
+  - platform: ledc
+    pin: GPIO17
+    id: led_blue
+    inverted: true
+
+light:
+  - platform: monochromatic
+    output: backlight_pwm
+    name: Display Backlight
+    id: backlight
+    restore_mode: ALWAYS_ON
+
+time:
+  - platform: sntp
+    id: sntp_time
+    timezone: Europe/London
+    servers:
+     - uk.pool.ntp.org
+
+sensor:
+  - platform: internal_temperature
+    id: room_temp
+    name: "Internal Temp"
+    update_interval: 10s
+    filters:
+      - sliding_window_moving_average:
+          window_size: 10
+          send_every: 1
+      - offset: -35.0 
+    on_value:
+      then:
+        - lvgl.label.update:
+            id: temp_readout
+            text:
+              format: "%.1f°C"
+              args: [ 'id(room_temp).state' ]
+
+# ============================================================ 
+# Display & LVGL
+# ============================================================ 
+display:
+  - platform: ili9xxx
+    id: my_display
+    model: ili9341
+    spi_id: tft
+    cs_pin: GPIO15
+    dc_pin: GPIO2
+    color_palette: 8BIT
+    rotation: 90
+    auto_clear_enabled: false 
+    update_interval: never
+    invert_colors: false
+
+touchscreen:
+  - platform: xpt2046
+    id: my_touch
+    spi_id: touch
+    cs_pin: GPIO33
+    interrupt_pin: GPIO36
+    update_interval: 50ms
+    threshold: 400
+    calibration:
+      x_min: 200
+      x_max: 3900
+      y_min: 200
+      y_max: 3800
+    transform:
+      swap_xy: false
+    on_touch:
+      then:
+        - script.execute: next_page
+
+font:
+  - file: "fonts/Arimo-Regular.ttf"
+    id: arimo24
+    size: 24
+  - file: "fonts/Arimo-Regular.ttf"
+    id: arimo48
+    size: 48
+  - file: "fonts/Arimo-Regular.ttf"
+    id: arimo96
+    size: 96
+
+image:
+  - file: "images/flag.jpg"
+    id: flag
+    type: RGB565
+    resize: 320x240 
+    dither: FloydSteinberg
+
+lvgl:
+  log_level: INFO
+  displays:
+    - my_display
+  touchscreens:
+    - my_touch
+  
+  on_pause:
+    then:
+      - script.execute: next_page
+
+  pages:
+    - id: clock_page
+      scrollbar_mode: "OFF"
+      widgets:
+        - image:
+            src: flag
+            align: CENTER
+            zoom: 2
+            clickable: false
+        - obj:
+            width: 100%
+            height: 100%
+            bg_color: 0x000000
+            bg_opa: 60%
+            border_width: 0
+            pad_all: 0
+            scrollbar_mode: "OFF"
+            widgets:
+              - label:
+                  id: date_label
+                  align: TOP_MID
+                  y: 10
+                  text_font: arimo24
+                  text_color: 0xEEEEEE
+                  text: "Loading..."
+              - label:
+                  id: time_label
+                  align: CENTER
+                  text_font: arimo96
+                  text_color: 0xFFFFFF
+                  text: "00:00"
+              - label:
+                  id: seconds_label
+                  align: BOTTOM_MID
+                  y: -30
+                  text_font: arimo48
+                  text_color: 0xEEEEEE
+                  text: "00"
+
+    - id: temp_page
+      scrollbar_mode: "OFF"
+      widgets:
+        - image:
+            src: flag
+            align: CENTER
+            zoom: 2
+            clickable: false
+        - obj:
+            width: 100%
+            height: 100%
+            bg_color: 0x000000
+            bg_opa: 60%
+            border_width: 0
+            pad_all: 0
+            scrollbar_mode: "OFF"
+            widgets:
+              - label:
+                  text: "Internal Temp:"
+                  align: CENTER
+                  y: -40
+                  text_font: arimo24
+                  text_color: 0xFFFFFF
+              - label:
+                  id: temp_readout
+                  align: CENTER
+                  y: 20
+                  text_font: arimo96
+                  text_color: 0xFFFFFF
+                  text: "--.-°C"
+
+    - id: british_page
+      scrollbar_mode: "OFF"
+      on_load:
+        then:
+          - lambda: |-
+              if (id(quotes_list).empty()) return;
+              
+              if (id(text_array_index) >= id(quotes_list).size()) {
+                id(text_array_index) = 0;
+              }
+              
+              lv_label_set_text(id(british_text_label), id(quotes_list)[id(text_array_index)].c_str());
+              
+              id(text_array_index)++;
+              if (id(text_array_index) >= id(quotes_list).size()) {
+                id(text_array_index) = 0;
+              }
+      widgets:
+        - image:
+            src: flag
+            align: CENTER
+            zoom: 2
+            clickable: false
+        - obj:
+            width: 100%
+            height: 100%
+            align: CENTER
+            bg_color: 0x000000
+            bg_opa: 60%
+            border_width: 0
+            pad_all: 0
+            scrollbar_mode: "OFF"
+            widgets:
+              - label:
+                  id: british_text_label
+                  width: 280   
+                  long_mode: WRAP
+                  text_align: CENTER
+                  align: CENTER
+                  text_font: arimo48 
+                  text_color: 0xFFFFFF
+                  scrollbar_mode: "OFF"
+
+# ============================================================ 
+# Logic & Automation
+# ============================================================ 
+interval:
+  - interval: 1s
+    then:
+      - lvgl.label.update:
+          id: time_label
+          text: !lambda 'return id(sntp_time).now().strftime("%H:%M").c_str();'
+      - lvgl.label.update:
+          id: seconds_label
+          text: !lambda 'return id(sntp_time).now().strftime("%S").c_str();'
+      - lvgl.label.update:
+          id: date_label
+          text: !lambda 'return id(sntp_time).now().strftime("%A, %B %d").c_str();'
+  # Refresh quotes every hour
+  - interval: 60s
+    then:
+      - script.execute: fetch_remote_quotes
+
+script:
+  - id: fetch_remote_quotes
+    then:
+      - http_request.get:
+          url: https://raw.githubusercontent.com/Pingue/britishisms/refs/heads/main/tally-ho-quotations-old-chap.json
+          capture_response: true
+          max_response_buffer_size: 4096
+          on_response:
+            then:
+              - if:
+                  condition:
+                      lambda: return response->status_code == 200;
+                  then:
+                      - lambda: |-
+                          ESP_LOGI("main","Fetched URL OK");
+                          ESP_LOGD("main",body.c_str());
+                          json::parse_json(body, [](JsonObject root) -> bool {
+                              ESP_LOGI("main","JSON Parsed");
+                              if (root["quotes"]) {
+                                  ESP_LOGI("main","Root quotes found");
+                                  ESP_LOGD("main",root["quotes"].as<String>().c_str());
+                                  id(quotes_list).clear();
+                                  std::vector<std::string> formedlist;
+                                  for (String v : root["quotes"].as<JsonArray>()) {
+                                    ESP_LOGI("main","Item Parsed");
+                                    ESP_LOGD("main",v.c_str());
+                                    formedlist.push_back(v.c_str());
+                                  }
+                                  id(quotes_list) = formedlist;
+                                  return true;
+                              }
+                              else {
+                                ESP_LOGI("main","No 'quotes' key in this json!");
+                                return false;
+                              }
+                          });
+                  else:
+                      - logger.log:
+                          format: "Error: Response status: %d, message %s"
+                          args: [ 'response->status_code', 'body.c_str()' ]
+
+  - id: next_page
+    mode: restart
+    then:
+      - lambda: |-
+          id(current_page_index)++;
+          if (id(current_page_index) > 2) id(current_page_index) = 0;
+      - if:
+          condition:
+            lambda: 'return id(current_page_index) == 0;'
+          then:
+            - lvgl.page.show: clock_page
+      - if:
+          condition:
+            lambda: 'return id(current_page_index) == 1;'
+          then:
+            - lvgl.page.show: temp_page
+      - if:
+          condition:
+            lambda: 'return id(current_page_index) == 2;'
+          then:
+            - lvgl.page.show: british_page
+      - delay: 15s
+      - script.execute: next_page
