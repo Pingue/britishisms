@@ -15,4 +15,5 @@ jobs:
             - uses: ncipollo/release-action@v1
               with:
                 artifacts: "*.json"
-                commit: main
+                commit: Release ${{ github.ref_name }}
+                tag: ${{ github.ref_name }}
