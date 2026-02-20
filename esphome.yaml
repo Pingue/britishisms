@@ -117,18 +117,18 @@ time:
     timezone: Europe/London
     servers:
       - uk.pool.ntp.org
-    on_time:
-      # Trigger every Sunday at 1:00 AM (UK time of course)
-      - seconds: 0
-        minutes: 0
-        hours: 1
-        days_of_week: SUN
-        then:
-          - logger.log: "Weekly OTA flash triggered"
-          - ota.http_request.flash:
-              md5_url: https://github.com/Pingue/britishisms/raw/refs/heads/main/cyd-josh.ota.bin.md5
-              url: https://github.com/Pingue/britishisms/raw/refs/heads/main/cyd-josh.ota.bin
-          - logger.log: "This should not be seen as the flash should reboot the device if successful"
+    # on_time:
+    #   # Trigger every Sunday at 1:00 AM (UK time of course)
+    #   - seconds: 0
+    #     minutes: 0
+    #     hours: 1
+    #     days_of_week: SUN
+    #     then:
+    #       - logger.log: "Weekly OTA flash triggered"
+    #       - ota.http_request.flash:
+    #           md5_url: https://github.com/Pingue/britishisms/raw/refs/heads/main/cyd-josh.ota.bin.md5
+    #           url: https://github.com/Pingue/britishisms/raw/refs/heads/main/cyd-josh.ota.bin
+    #       - logger.log: "This should not be seen as the flash should reboot the device if successful"
 
 sensor:
   - platform: internal_temperature
