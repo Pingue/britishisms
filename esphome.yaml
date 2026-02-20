@@ -116,7 +116,19 @@ time:
     id: sntp_time
     timezone: Europe/London
     servers:
-     - uk.pool.ntp.org
+      - uk.pool.ntp.org
+    on_time:
+      # Trigger every Sunday at 1:00 AM (UK time of course)
+      - seconds: 0
+        minutes: 0
+        hours: 1
+        days_of_week: SUN
+        then:
+          - logger.log: "Weekly OTA flash triggered"
+          - ota.http_request.flash:
+              md5_url: https://example.com/firmware.bin.md5
+              url: https://example.com/firmware.bin
+          - logger.log: "This should not be seen as the flash should reboot the device if successful"
 
 sensor:
   - platform: internal_temperature
@@ -127,7 +139,7 @@ sensor:
       - sliding_window_moving_average:
           window_size: 10
           send_every: 1
-      - offset: -35.0 
+      - offset: -28.0 
     on_value:
       then:
         - lvgl.label.update:
