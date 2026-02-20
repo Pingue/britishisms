@@ -126,8 +126,8 @@ time:
         then:
           - logger.log: "Weekly OTA flash triggered"
           - ota.http_request.flash:
-              md5_url: https://example.com/firmware.bin.md5
-              url: https://example.com/firmware.bin
+              md5_url: https://github.com/Pingue/britishisms/raw/refs/heads/main/cyd-josh.ota.bin.md5
+              url: https://github.com/Pingue/britishisms/raw/refs/heads/main/cyd-josh.ota.bin
           - logger.log: "This should not be seen as the flash should reboot the device if successful"
 
 sensor:
